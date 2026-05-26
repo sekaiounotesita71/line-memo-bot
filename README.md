@@ -30,6 +30,8 @@ LINE グループに投稿されたウニの相場・品質メモを、OpenAI Re
 LINE_CHANNEL_SECRET=
 LINE_CHANNEL_ACCESS_TOKEN=
 OPENAI_API_KEY=
+SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
 ```
 
 任意:
@@ -122,6 +124,80 @@ npm start
 ```text
 利尻バフン 250g 今日は色よし。やや小粒。札幌で箱8500くらい。週末分は強気注意
 ```
+
+## 蓄積機能
+
+このBotはSupabaseにLINEメモを保存できます。
+
+通常のメモを送ると、AIが整理して返信し、同じ内容を `line_memories` テーブルに保存します。
+
+```text
+利尻バフン 250g 色よし 小粒 札幌8500くらい 週末強気注意
+```
+
+質問っぽい文を送ると、保存済みメモをもとに回答します。
+
+```text
+神経締めの特徴まとめて
+今週のウニ相場どう？
+過去の注意点を一覧で
+```
+
+### Excel相場表の保存
+
+LINEに `.xlsx` の相場表を送ると、固定フォーマットとして読み取り、`price_rows` テーブルに保存します。
+
+対応シート:
+
+```text
+Master Special
+Master Special 野菜
+Master Cheap list
+```
+
+保存する主な項目:
+
+```text
+ファイル名
+シート名
+区分
+商品名
+産地
+サイズ
+kg
+日本価格 下
+日本価格 上
+マレーシア価格
+タイ価格
+シンガポール価格
+カンボジア価格
+```
+
+Excel保存後は、LINEで次のように質問できます。
+
+```text
+今日の相場表まとめて
+クエの相場どう？
+タイ向けで高い商品は？
+シンガポール向けの商品一覧
+```
+
+### Supabaseの準備
+
+1. [Supabase](https://supabase.com/) でプロジェクトを作成します。
+2. `SQL Editor` を開きます。
+3. このリポジトリの `supabase.sql` の中身を貼り付けて実行します。
+4. `Project Settings` → `API` で以下を確認します。
+   - `Project URL`
+   - `service_role key`
+5. RenderのEnvironment Variablesに以下を追加します。
+
+```text
+SUPABASE_URL=Project URL
+SUPABASE_SERVICE_ROLE_KEY=service_role key
+```
+
+`service_role key` は秘密情報です。GitHubやLINEには貼らないでください。
 
 返信:
 

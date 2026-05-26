@@ -24,6 +24,8 @@ export const config = {
   lineChannelSecret: requireEnv("LINE_CHANNEL_SECRET"),
   lineChannelAccessToken: requireEnv("LINE_CHANNEL_ACCESS_TOKEN"),
   openaiApiKey: requireEnv("OPENAI_API_KEY"),
-  openaiModel: process.env.OPENAI_MODEL ?? "gpt-5.5",
+  openaiModel: process.env.OPENAI_MODEL ?? "gpt-4.1-mini",
+  supabaseUrl: process.env.SUPABASE_URL,
+  supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
   port: Number(process.env.PORT ?? 3000)
 };

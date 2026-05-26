@@ -1,17 +1,32 @@
 import express from "express";
-import {
-  middleware,
-  messagingApi
-} from "@line/bot-sdk";
+import { middleware, messagingApi } from "@line/bot-sdk";
+import { Readable } from "node:stream";
 import { config } from "./config.js";
-import { summarizeSeaUrchinMemo } from "./openai.js";
+import { parsePriceWorkbook } from "./excel.js";
+import { answerFromMemories, summarizeSeaUrchinMemo } from "./openai.js";
+import {
+  isMemoryEnabled,
+  listRecentMemories,
+  listRecentPriceRows,
+  saveMemory,
+  savePriceRows
+} from "./memory.js";
 
 type LineWebhookEvent = {
   type: string;
   replyToken?: string;
   message?: {
     type: string;
+    id?: string;
+    fileName?: string;
+    fileSize?: number;
     text?: string;
+  };
+  source?: {
+    type: string;
+    userId?: string;
+    groupId?: string;
+    roomId?: string;
   };
 };
 
@@ -21,6 +36,10 @@ const lineConfig = {
 };
 
 const lineClient = new messagingApi.MessagingApiClient({
+  channelAccessToken: config.lineChannelAccessToken
+});
+
+const lineBlobClient = new messagingApi.MessagingApiBlobClient({
   channelAccessToken: config.lineChannelAccessToken
 });
 
@@ -43,15 +62,11 @@ app.post("/webhook", middleware(lineConfig), async (req, res) => {
 });
 
 async function handleEvent(event: LineWebhookEvent): Promise<void> {
-  if (event.type !== "message") {
+  if (event.type !== "message" || !event.replyToken) {
     return;
   }
 
-  if (event.message?.type !== "text" || !event.message.text || !event.replyToken) {
-    return;
-  }
-
-  const replyText = await buildReply(event.message.text);
+  const replyText = await buildReply(event);
 
   await lineClient.replyMessage({
     replyToken: event.replyToken,
@@ -64,17 +79,114 @@ async function handleEvent(event: LineWebhookEvent): Promise<void> {
   });
 }
 
-async function buildReply(text: string): Promise<string> {
+async function buildReply(event: LineWebhookEvent): Promise<string> {
   try {
-    return await summarizeSeaUrchinMemo(text);
+    if (!isMemoryEnabled()) {
+      return [
+        "商品: 不明",
+        "状態: DB設定が未完了",
+        "相場: 不明",
+        "注意点: Supabaseの環境変数をRenderに追加してください。",
+        "営業コメント: 蓄積型にするにはSUPABASE_URLとSUPABASE_SERVICE_ROLE_KEYが必要です。"
+      ].join("\n");
+    }
+
+    if (event.message?.type === "file" && event.message.id) {
+      return await handleFileMessage(event);
+    }
+
+    if (event.message?.type !== "text" || !event.message.text) {
+      return "テキストメモかExcel相場表を送ってください。";
+    }
+
+    const text = event.message.text;
+
+    if (isQuestion(text)) {
+      const memories = await listRecentMemories();
+      const priceRows = await listRecentPriceRows();
+      return await answerFromMemories(text, memories, priceRows);
+    }
+
+    const summary = await summarizeSeaUrchinMemo(text);
+
+    await saveMemory({
+      sourceType: event.source?.type ?? "unknown",
+      sourceId: getSourceId(event),
+      userId: event.source?.userId,
+      rawText: text,
+      summary
+    });
+
+    return `${summary}\n\n保存: OK`;
   } catch (error) {
-    console.error("Failed to summarize memo:", error);
+    console.error("Failed to process message:", error);
     return [
       "商品: 不明",
       "状態: 不明",
       "相場: 不明",
-      "注意点: AI整理に失敗。原文を確認してください。",
-      "営業コメント: もう一度短めに送ってください。"
+      "注意点: AI整理または保存に失敗。Renderログを確認してください。",
+      "営業コメント: もう一度送るか、ファイル形式を確認してください。"
     ].join("\n");
   }
+}
+
+async function handleFileMessage(event: LineWebhookEvent): Promise<string> {
+  const fileName = event.message?.fileName ?? "unknown.xlsx";
+
+  if (!fileName.toLowerCase().endsWith(".xlsx")) {
+    return "Excel相場表は .xlsx ファイルで送ってください。";
+  }
+
+  const content = await lineBlobClient.getMessageContent(event.message?.id ?? "");
+  const buffer = await streamToBuffer(content);
+  const rows = parsePriceWorkbook(buffer, {
+    sourceId: getSourceId(event),
+    fileName
+  });
+
+  await savePriceRows(rows);
+
+  return [
+    "相場表保存: OK",
+    `ファイル: ${fileName}`,
+    `保存件数: ${rows.length}件`,
+    "質問例: 今日の相場表まとめて / クエの相場どう？ / タイ向けで高い商品は？"
+  ].join("\n");
+}
+
+function getSourceId(event: LineWebhookEvent): string | undefined {
+  return event.source?.groupId ?? event.source?.roomId ?? event.source?.userId;
+}
+
+async function streamToBuffer(stream: Readable): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+
+  for await (const chunk of stream) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+
+  return Buffer.concat(chunks);
+}
+
+function isQuestion(text: string): boolean {
+  return [
+    "?",
+    "？",
+    "教えて",
+    "まとめ",
+    "まとめて",
+    "どう",
+    "どれ",
+    "なに",
+    "何",
+    "検索",
+    "過去",
+    "特徴",
+    "傾向",
+    "比較",
+    "一覧",
+    "相場",
+    "高い",
+    "安い"
+  ].some((word) => text.includes(word));
 }
