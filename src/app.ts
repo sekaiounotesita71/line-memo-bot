@@ -6,8 +6,7 @@ import {
 import { config } from "./config.js";
 import { summarizeSeaUrchinMemo } from "./openai.js";
 
-type LineWebhookEvent =
-{
+type LineWebhookEvent = {
   type: string;
   replyToken?: string;
   message?: {
