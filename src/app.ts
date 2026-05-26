@@ -102,18 +102,20 @@ async function buildReply(event: LineWebhookEvent): Promise<string> {
     const text = event.message.text;
 
     if (isQuestion(text)) {
+      const question = stripCommand(text);
       const memories = await listRecentMemories();
       const priceRows = await listRecentPriceRows();
-      return await answerFromMemories(text, memories, priceRows);
+      return await answerFromMemories(question, memories, priceRows);
     }
 
-    const summary = await summarizeSeaUrchinMemo(text);
+    const memoText = stripCommand(text);
+    const summary = await summarizeSeaUrchinMemo(memoText);
 
     await saveMemory({
       sourceType: event.source?.type ?? "unknown",
       sourceId: getSourceId(event),
       userId: event.source?.userId,
-      rawText: text,
+      rawText: memoText,
       summary
     });
 
@@ -169,24 +171,10 @@ async function streamToBuffer(stream: Readable): Promise<Buffer> {
 }
 
 function isQuestion(text: string): boolean {
-  return [
-    "?",
-    "？",
-    "教えて",
-    "まとめ",
-    "まとめて",
-    "どう",
-    "どれ",
-    "なに",
-    "何",
-    "検索",
-    "過去",
-    "特徴",
-    "傾向",
-    "比較",
-    "一覧",
-    "相場",
-    "高い",
-    "安い"
-  ].some((word) => text.includes(word));
+  const normalized = text.trim();
+  return normalized.startsWith("質問:") || normalized.startsWith("質問：");
+}
+
+function stripCommand(text: string): string {
+  return text.replace(/^(メモ|質問|相場表)[:：]\s*/, "").trim();
 }
