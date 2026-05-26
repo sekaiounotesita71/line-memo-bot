@@ -172,9 +172,9 @@ async function streamToBuffer(stream: Readable): Promise<Buffer> {
 
 function isQuestion(text: string): boolean {
   const normalized = text.trim();
-  return normalized.startsWith("質問:") || normalized.startsWith("質問：");
+  return /^(質問|聞く|検索|Q|q)\s*[:：\s]/.test(normalized);
 }
 
 function stripCommand(text: string): string {
-  return text.replace(/^(メモ|質問|相場表)[:：]\s*/, "").trim();
+  return text.replace(/^(メモ|保存|質問|聞く|検索|相場表|Q|q)\s*[:：\s]\s*/, "").trim();
 }
