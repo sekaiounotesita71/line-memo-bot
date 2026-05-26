@@ -7,21 +7,14 @@ import { config } from "./config.js";
 import { summarizeSeaUrchinMemo } from "./openai.js";
 
 type LineWebhookEvent =
-  | {
-      type: "message";
-      replyToken: string;
-      message:
-        | {
-            type: "text";
-            text: string;
-          }
-        | {
-            type: string;
-          };
-    }
-  | {
-      type: string;
-    };
+{
+  type: string;
+  replyToken?: string;
+  message?: {
+    type: string;
+    text?: string;
+  };
+};
 
 const lineConfig = {
   channelSecret: config.lineChannelSecret,
@@ -55,7 +48,7 @@ async function handleEvent(event: LineWebhookEvent): Promise<void> {
     return;
   }
 
-  if (event.message.type !== "text") {
+  if (event.message?.type !== "text" || !event.message.text || !event.replyToken) {
     return;
   }
 
