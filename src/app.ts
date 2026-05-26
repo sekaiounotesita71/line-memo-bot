@@ -1,11 +1,27 @@
 import express from "express";
 import {
   middleware,
-  messagingApi,
-  type WebhookEvent
+  messagingApi
 } from "@line/bot-sdk";
 import { config } from "./config.js";
 import { summarizeSeaUrchinMemo } from "./openai.js";
+
+type LineWebhookEvent =
+  | {
+      type: "message";
+      replyToken: string;
+      message:
+        | {
+            type: "text";
+            text: string;
+          }
+        | {
+            type: string;
+          };
+    }
+  | {
+      type: string;
+    };
 
 const lineConfig = {
   channelSecret: config.lineChannelSecret,
@@ -27,14 +43,14 @@ app.get("/health", (_req, res) => {
 });
 
 app.post("/webhook", middleware(lineConfig), async (req, res) => {
-  const events = req.body.events as WebhookEvent[];
+  const events = req.body.events as LineWebhookEvent[];
 
   await Promise.all(events.map(handleEvent));
 
   res.status(200).end();
 });
 
-async function handleEvent(event: WebhookEvent): Promise<void> {
+async function handleEvent(event: LineWebhookEvent): Promise<void> {
   if (event.type !== "message") {
     return;
   }
